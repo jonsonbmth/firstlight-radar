@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Firstlight Radar — pre-token protocols ranked by implied value</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="lamp" aria-hidden="true"></span><div><h1>Firstlight Radar</h1><p>Pre-token protocols, ranked by what a launch would be worth — and whether farming it pays.</p></div></div>
+  <div class="meta" id="meta"></div>
+</header>
+<nav class="tabs" role="tablist" aria-label="Views">
+  <button class="tab active" data-tab="board" role="tab" aria-selected="true">Board</button>
+  <button class="tab" data-tab="method" role="tab" aria-selected="false">Method</button>
+  <button class="tab" data-tab="live" role="tab" aria-selected="false">Already trading</button>
+</nav>
+<main>
+  <section id="tab-board" class="panel" role="tabpanel">
+    <div class="kpis" id="kpis"></div>
+    <div class="controls" id="controls"></div>
+    <div class="status" id="status" aria-live="polite"></div>
+    <div class="tablewrap"><table id="board"><thead></thead><tbody></tbody></table></div>
+    <div class="card detail hidden" id="detail"></div>
+    <div class="grid2">
+      <div class="card" id="verify"></div>
+      <div class="card" id="modelcard"></div>
+    </div>
+    <div class="card" id="oos"></div>
+    <div class="card" id="coverage"></div>
+  </section>
+  <section id="tab-method" class="panel hidden" role="tabpanel"></section>
+  <section id="tab-live" class="panel hidden" role="tabpanel"></section>
+</main>
+<footer><p>Firstlight Radar · <span id="foot"></span> · Implied values are this radar's own claim from the sealed snapshot, never a promise a token launches. Farming risks loss; the verdicts are arithmetic, not advice.</p></footer>
+<script src="../data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
