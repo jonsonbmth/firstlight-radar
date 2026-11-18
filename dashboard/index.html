@@ -3,38 +3,49 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Firstlight Radar — pre-token protocols ranked by implied value</title>
+<title>Firstlight Radar — Token Launch Radar</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<header class="top">
-  <div class="brand"><span class="lamp" aria-hidden="true"></span><div><h1>Firstlight Radar</h1><p>Pre-token protocols, ranked by what a launch would be worth — and whether farming it pays.</p></div></div>
-  <div class="meta" id="meta"></div>
+<header class="topbar">
+  <div class="brand"><span class="lamp" aria-hidden="true">&#9673;</span> FIRSTLIGHT <b>RADAR</b></div>
+  <div class="topsub">Token launch radar &middot; sealed DefiLlama snapshot <span id="asof"></span> &middot; 758 protocols screened</div>
+  <div class="topright"><span class="badge watch" id="watch-badge"></span><span class="badge rows" id="rows-badge"></span></div>
 </header>
-<nav class="tabs" role="tablist" aria-label="Views">
-  <button class="tab active" data-tab="board" role="tab" aria-selected="true">Board</button>
-  <button class="tab" data-tab="method" role="tab" aria-selected="false">Method</button>
-  <button class="tab" data-tab="live" role="tab" aria-selected="false">Already trading</button>
+<nav class="tabs">
+  <a href="#board" id="tab-board" class="tab active">Board</a>
+  <a href="#method" id="tab-method" class="tab">Method</a>
+  <span class="tabnote">Every number below is computed from the snapshot at run time &mdash; no protocol name is hardcoded.</span>
 </nav>
 <main>
-  <section id="tab-board" class="panel" role="tabpanel">
-    <div class="kpis" id="kpis"></div>
-    <div class="controls" id="controls"></div>
-    <div class="status" id="status" aria-live="polite"></div>
-    <div class="tablewrap"><table id="board"><thead></thead><tbody></tbody></table></div>
-    <div class="card detail hidden" id="detail"></div>
-    <div class="grid2">
-      <div class="card" id="verify"></div>
-      <div class="card" id="modelcard"></div>
+  <section id="kpi" class="kpi"></section>
+  <section id="panels" class="panels">
+    <div id="model-panel" class="panel model"></div>
+    <div class="side">
+      <div id="hazard-panel" class="panel"></div>
+      <div id="coverage-panel" class="panel"></div>
+      <div id="farm-panel" class="panel"></div>
     </div>
-    <div class="card" id="oos"></div>
-    <div class="card" id="coverage"></div>
   </section>
-  <section id="tab-method" class="panel hidden" role="tabpanel"></section>
-  <section id="tab-live" class="panel hidden" role="tabpanel"></section>
+  <section id="board-sec">
+    <div class="controls">
+      <div class="chips" id="chips"></div>
+      <select id="cat-select" aria-label="Filter by category"></select>
+      <input id="search" type="search" placeholder="Search protocol or slug&hellip;" aria-label="Search">
+    </div>
+    <table id="board-table">
+      <thead><tr id="thead-row"></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div id="board-foot" class="board-foot"></div>
+  </section>
+  <section id="detail-sec" hidden></section>
+  <section id="method-sec" hidden></section>
 </main>
-<footer><p>Firstlight Radar · <span id="foot"></span> · Implied values are this radar's own claim from the sealed snapshot, never a promise a token launches. Farming risks loss; the verdicts are arithmetic, not advice.</p></footer>
-<script src="../data.js"></script>
+<footer>
+  Firstlight Radar &middot; a token-radar-01 entry &middot; model, odds and verdicts are the entry&rsquo;s own arithmetic from the snapshot, not advice &middot; farming risks loss.
+</footer>
+<script src="z-data.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

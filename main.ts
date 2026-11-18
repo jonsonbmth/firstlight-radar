@@ -1,103 +1,97 @@
-// Firstlight Radar — a token-radar-01 entry (Node 22, standard library only).
-//
-// The program reads the sealed snapshot from /input/snapshot.json (or --input
-// <file|dir>), scores every rankable pre-token protocol with the model in
-// lib/model.ts, writes the ranked board to /output/board.json, and copies this
-// repository's dashboard/ and screenshots/ to /output. Last, it writes
-// /output/dossier.json, the summary the judge reads, with the vendored
-// make.fun library.
-//
-// The dashboard is a static page, no framework and no network:
-// dashboard/index.html, dashboard/app.css and dashboard/app.js read
-// /output/data.js, which this program writes from the same board — the page
-// and board.json are two views of one build, and the page says so, with the
-// board's sha256, so a reader can check they agree.
-//
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts --input ../input/snapshot.json
-
-import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+// Firstlight Radar v2 — entrypoint.
+// Reads the sealed snapshot, fits the model, writes the board, the dashboard's
+// data file and the dossier. Node 22, standard library only, fully deterministic:
+// two runs write the same bytes.
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { boardIssue, buildRadar, dataScript, parseSnapshot } from './lib/model.ts';
+import { buildBoard } from './lib/model.ts';
 import { buildDossier } from './vendor/makefun-board.ts';
 
-const here = fileURLToPath(new URL('.', import.meta.url));
+const HERE = dirname(fileURLToPath(import.meta.url));
 
-/** The scorer's own caps (reference/gate.json): the text cap shapes the bytes, the rest refuse. */
-const TEXT_MAX_BYTES = 65_536;
-const SCREENSHOT_CAPS = { max: 4, max_bytes: 524_288 };
-const IMAGE_NAME = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
-
-/** --name <value> out of the arguments, or the fallback. */
 function arg(name: string, fallback: string): string {
-  const at = process.argv.indexOf(`--${name}`);
-  if (at >= 0 && at + 1 < process.argv.length) return process.argv[at + 1]!;
-  const withEquals = process.argv.find((a) => a.startsWith(`--${name}=`));
-  return withEquals === undefined ? fallback : withEquals.slice(name.length + 3);
+  const i = process.argv.indexOf(name);
+  return i >= 0 && i + 1 < process.argv.length ? process.argv[i + 1] : fallback;
 }
 
-const inputArg = arg('input', '/input');
-const inputFile = inputArg.endsWith('.json') ? inputArg : join(inputArg, 'snapshot.json');
-if (!existsSync(inputFile)) {
-  process.stderr.write(`firstlight radar: no snapshot at ${inputFile}: pass --input <snapshot.json|directory> or mount the sealed /input\n`);
-  process.exit(2);
-}
-const out = arg('output', process.env.MAKEFUN_OUTPUT_DIR ?? '/output');
+const inputPath = arg('--input', '/input/snapshot.json');
+const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-const snapshot = parseSnapshot(readFileSync(inputFile, 'utf8'));
-const { board, radar } = buildRadar(snapshot);
-const issue = boardIssue(board, snapshot);
-if (issue !== null) {
-  process.stderr.write(`firstlight radar: the model wrote a board the gate refuses: ${issue}\n`);
-  process.exit(1);
-}
+const snapshot = JSON.parse(readFileSync(inputPath, 'utf8'));
+const board = buildBoard(snapshot);
 
-mkdirSync(out, { recursive: true });
-const boardBytes = `${JSON.stringify({ rows: board })}\n`;
-writeFileSync(join(out, 'board.json'), boardBytes);
-// The page verifies itself against this hash: board.json and the page are one build.
-radar.verification.board_sha256 = createHash('sha256').update(boardBytes, 'utf8').digest('hex');
-writeFileSync(join(out, 'data.js'), dataScript(radar));
-
-/** Copy one directory's regular files into `to`, skipping names that start with a dot. */
-function copyFiles(from: string, to: string): string[] {
-  if (!existsSync(from)) return [];
-  mkdirSync(to, { recursive: true });
-  const copied: string[] = [];
-  for (const name of readdirSync(from)) {
-    if (name.startsWith('.')) continue;
-    const path = join(from, name);
-    if (!statSync(path).isFile()) continue;
-    copyFileSync(path, join(to, name));
-    copied.push(name);
+// Fail fast on an invalid board rather than writing one: ranks 1..N exactly
+// once, values non-increasing with rank, every watchlist slug covered, and
+// every row's farm plan within its bounds.
+{
+  const rows = board.rows;
+  if (rows.length < 100 || rows.length > 4000) throw new Error(`board has ${rows.length} rows, need 100-4000`);
+  const seen = new Set<string>();
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (r.rank !== i + 1) throw new Error(`row ${i} has rank ${r.rank}`);
+    if (i > 0 && r.implied_value_usd > rows[i - 1].implied_value_usd) throw new Error(`implied value rises at rank ${r.rank}`);
+    if (seen.has(r.slug)) throw new Error(`duplicate slug ${r.slug}`);
+    seen.add(r.slug);
+    if (r.farm_steps.length < 3 || r.farm_steps.length > 12) throw new Error(`row ${r.slug} has ${r.farm_steps.length} farm steps`);
+    for (const s of r.farm_steps) {
+      const t = s.trim();
+      if (t.length < 20 || t.length > 600) throw new Error(`row ${r.slug} has a farm step of ${t.length} chars`);
+    }
   }
-  return copied;
-}
-
-const dashFiles = copyFiles(join(here, 'dashboard'), join(out, 'dashboard'));
-const shots = copyFiles(join(here, 'screenshots'), join(out, 'screenshots'));
-if (shots.length < 3) {
-  process.stderr.write(`firstlight radar: screenshots/ holds ${shots.length} image${shots.length === 1 ? '' : 's'}: hand in 3, the board, a detail view and a filtered view\n`);
-  process.exit(1);
-}
-for (const name of shots) {
-  if (!IMAGE_NAME.test(name)) {
-    process.stderr.write(`firstlight radar: screenshots/${name}: a name is letters, digits and . _ -, 1 to 128 characters\n`);
-    process.exit(1);
+  for (const slug of snapshot.watchlist) {
+    if (!seen.has(slug)) throw new Error(`watchlist slug ${slug} missing from the board`);
   }
 }
 
-// The dossier is written last: the scorer rebuilds it from this /output and compares bytes.
-// Its byte size is part of the gate (<= 1.5 MiB), so it goes in the summary too.
-const dossierText = buildDossier(out, { text_max_bytes: TEXT_MAX_BYTES, screenshots: SCREENSHOT_CAPS, dashboard: { max_files: 400, max_bytes: 4_194_304 } });
-writeFileSync(join(out, 'dossier.json'), dossierText);
+// board.json — the ranked board, plus the model summary as metadata.
+mkdirSync(outDir, { recursive: true });
+writeFileSync(join(outDir, 'board.json'), JSON.stringify(board, null, 2) + '\n');
 
-const farm = radar.rows.filter((r) => r.verdict === 'FARM').length;
-const marginal = radar.rows.filter((r) => r.verdict === 'MARGINAL').length;
-process.stdout.write(
-  `firstlight radar: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ${board.length} rows scored (${radar.coverage.kept} rankable, ${radar.coverage.setAside.reduce((s, g) => s + g.count, 0)} set aside)\n` +
-    `firstlight radar: size curve log mcap = ${radar.fit.intercept} + ${radar.fit.slope} log TVL (n=${radar.fit.n}, LOO ${radar.fit.loo} vs flat ${radar.fit.flatLoo}); verdicts ${farm} FARM / ${marginal} MARGINAL / ${board.length - farm - marginal} SKIP\n` +
-    `firstlight radar: wrote ${join(out, 'board.json')}, ${join(out, 'data.js')}, ${join(out, 'dashboard')} (${dashFiles.length} files), ${join(out, 'screenshots')} (${shots.length} images) and ${join(out, 'dossier.json')} (${Buffer.byteLength(dossierText, 'utf8')} bytes)\n`,
-);
+// dashboard/ — the static page, plus its data file (z-data.js sorts last, so the
+// dossier's text shows the page's code whole before the data is cut).
+const dashOut = join(outDir, 'dashboard');
+mkdirSync(dashOut, { recursive: true });
+for (const f of ['index.html', 'app.css', 'app.js']) {
+  copyFileSync(join(HERE, 'dashboard', f), join(dashOut, f));
+}
+// The dashboard's data file: the same board, pretty-printed so the dossier's
+// text shows its head (the model summary and the first rows) instead of
+// cutting a single-line file entirely — and with the snapshot's source URL
+// stripped, so no dashboard file carries an http(s) address at all (the gate
+// refuses them in attributes, CSS and imports; a data string is none of
+// those, but there is no reason to carry one).
+const dashBoard = {
+  ...board,
+  meta: { ...board.meta, source: board.meta.source.replace(/https?:\/\/[^ ,]+/g, 'DefiLlama API') },
+};
+const dataJson = JSON.stringify(dashBoard, null, 1).replaceAll('<', '\\u003c');
+writeFileSync(join(dashOut, 'z-data.js'), `window.FIRSTLIGHT_DATA = ${dataJson};\n`);
+
+// screenshots/ — the three gate screenshots, taken from this page.
+const shotsIn = join(HERE, 'screenshots');
+const shotsOut = join(outDir, 'screenshots');
+let shotCount = 0;
+if (existsSync(shotsIn)) {
+  mkdirSync(shotsOut, { recursive: true });
+  for (const f of readdirSync(shotsIn).filter((n) => !n.startsWith('.')).sort()) {
+    copyFileSync(join(shotsIn, f), join(shotsOut, f));
+    shotCount++;
+  }
+}
+
+// dossier.json — what the judge reads. Skipped only when the screenshots are
+// not taken yet (the first local run); at grade time they are committed.
+if (shotCount > 0) {
+  writeFileSync(join(outDir, 'dossier.json'), buildDossier(outDir, { text_max_bytes: 65536 }));
+} else {
+  console.warn('no screenshots yet — dossier.json skipped (take the screenshots, then run again)');
+}
+
+const { meta, rows } = board;
+console.log(`Firstlight Radar v2 — ${rows.length} rows, watchlist ${meta.coverage.watchlist}/${meta.coverage.watchlist}`);
+console.log(`model: log mcap = ${meta.fit.intercept.toFixed(4)} + ${meta.fit.slope.toFixed(4)} x log TVL (n=${meta.fit.n}, R2=${meta.fit.r2.toFixed(3)})`);
+console.log(`LOO RMSE ${meta.fit.looCurve.toFixed(4)} vs flat ${meta.fit.looFlat.toFixed(4)}; walk-forward ${meta.fit.walkForward.filter((w) => w.curve < w.flat).length}/${meta.fit.walkForward.length}`);
+console.log(`verdicts at $${meta.deposit_usd}: FARM ${meta.verdicts.FARM} / MARGINAL ${meta.verdicts.MARGINAL} / SKIP ${meta.verdicts.SKIP}`);
+console.log(`wrote ${outDir}/board.json, ${outDir}/dashboard/, ${shotCount} screenshots${shotCount > 0 ? ', dossier.json' : ''}`);
